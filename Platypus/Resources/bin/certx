@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# certx v0.3
+# certx v0.3.1
 # part of truSTW v2
 
 HOMEDIR=$(osascript -e 'POSIX path of (path to home folder)' 2>/dev/null | sed 's,/$,,')
@@ -8,7 +8,7 @@ HOMEDIR=$(osascript -e 'POSIX path of (path to home folder)' 2>/dev/null | sed '
 
 process="certx"
 account=$(id -u)
-version="0.3"
+version="0.3.1"
 vmisc=""
 
 if [[ $1 == "-s" ]] || [[ $1 == "--silent" ]] ; then
@@ -23,7 +23,6 @@ fi
 certx_dir="$HOMEDIR/Library/Application Support/truSTW/certx"
 if ! [[ -d "$certx_dir" ]] ; then
 	! $silent && echo "Creating extraction directory: ~/Library/Application Support/truSTW/certx"
-	echo "$certx_dir"
 	rm -rf "$certx_dir" 2>/dev/null
 	mkdir -p "$certx_dir"
 fi
