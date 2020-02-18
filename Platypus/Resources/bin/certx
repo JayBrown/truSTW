@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# certx v0.3.1
+# certx v0.3.2
 # part of truSTW v2
 
 HOMEDIR=$(osascript -e 'POSIX path of (path to home folder)' 2>/dev/null | sed 's,/$,,')
@@ -8,8 +8,24 @@ HOMEDIR=$(osascript -e 'POSIX path of (path to home folder)' 2>/dev/null | sed '
 
 process="certx"
 account=$(id -u)
-version="0.3.1"
+version="0.3.2"
 vmisc=""
+
+_tag () {
+	xattr -cr "$certx_dir" 2>/dev/null
+	xattr -xw com.apple.FinderInfo 0000000000000000000900000000000000000000000000000000000000000000 "$certx_dir" 2>/dev/null
+	read -d '' tag_xml <<"EOF"
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<array>
+	<string>truSTW</string>
+</array>
+</plist>
+EOF
+	tag_binary=$(echo "$tag_xml" | plutil -convert binary1 - -o - | xxd -p -c 256 -u)
+	xattr -xw com.apple.metadata:_kMDItemUserTags "$tag_binary" "$certx_dir" 2>/dev/null
+}
 
 if [[ $1 == "-s" ]] || [[ $1 == "--silent" ]] ; then
 	shift
@@ -24,7 +40,7 @@ certx_dir="$HOMEDIR/Library/Application Support/truSTW/certx"
 if ! [[ -d "$certx_dir" ]] ; then
 	! $silent && echo "Creating extraction directory: ~/Library/Application Support/truSTW/certx"
 	rm -rf "$certx_dir" 2>/dev/null
-	mkdir -p "$certx_dir"
+	mkdir -p "$certx_dir" && _tag
 fi
 
 ! [[ $@ ]] && { echo "Error: no input!" ; exit ; }
