@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# certx v0.3.2
+# certx v0.3.3
 # part of truSTW v2
 
 HOMEDIR=$(osascript -e 'POSIX path of (path to home folder)' 2>/dev/null | sed 's,/$,,')
@@ -8,13 +8,13 @@ HOMEDIR=$(osascript -e 'POSIX path of (path to home folder)' 2>/dev/null | sed '
 
 process="certx"
 account=$(id -u)
-version="0.3.2"
+version="0.3.3"
 vmisc=""
 
 _tag () {
 	xattr -cr "$certx_dir" 2>/dev/null
 	xattr -xw com.apple.FinderInfo 0000000000000000000900000000000000000000000000000000000000000000 "$certx_dir" 2>/dev/null
-	read -d '' tag_xml <<"EOF"
+	read -dr '' tag_xml <<"EOF"
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -43,7 +43,7 @@ if ! [[ -d "$certx_dir" ]] ; then
 	mkdir -p "$certx_dir" && _tag
 fi
 
-! [[ $@ ]] && { echo "Error: no input!" ; exit ; }
+! [[ $* ]] && { echo "Error: no input!" ; exit ; }
 
 for filepath in "$@"
 do
@@ -70,7 +70,7 @@ if [[ $suffix == pkg ]] || [[ $suffix == mpkg ]] ; then
 		| awk '{gsub("BEGINCERTIFICATE-----","BEGIN CERTIFICATE-----\n"); gsub("-----ENDCERTIFICATE","\n-----END CERTIFICATE"); print}' \
 		| csplit -k -s -n 1 -f "$target_subdir/"cert - '/END CERTIFICATE/+1' '{3}' 2>/dev/null
 	if ! [[ -f "$target_subdir/cert0" ]] ; then
-		if [[ $(pkgutil --check-signature "filepath" 2>&1 | grep "^Status: no signature") ]] ; then
+		if pkgutil --check-signature "filepath" 2>&1 | grep -q "^Status: no signature" ; then
 			echo "Error: unsigned!"
 		else
 			echo "Error: signature"
@@ -83,7 +83,7 @@ if [[ $suffix == pkg ]] || [[ $suffix == mpkg ]] ; then
 		isx_raw=$(openssl x509 -in "$target_subdir/$isx_leaf" -inform PEM -noout -text -fingerprint -sha256 2>/dev/null)
 		isxsha_raw=$(openssl x509 -in "$target_subdir/$isx_leaf" -inform PEM -noout -text -fingerprint -sha1 2>/dev/null)
 		isx_subject=$(echo "$isx_raw" | grep "Subject: ")
-		if [[ $(echo "$isx_subject" | grep "CN=") ]] ; then
+		if echo "$isx_subject" | grep -q "CN=" ; then
 			isx_auth=$(echo "$isx_subject" | awk -F"CN=" '{print substr($0, index($0,$2))}' | awk -F, '{print $1}')
 		else
 			isx_auth=$(pkgutil --check-signature "$filepath" | grep -B1 "SHA1 fingerprint: " | head -n 1 | awk '{print substr($0, index($0,$2))}')
@@ -97,7 +97,9 @@ if [[ $suffix == pkg ]] || [[ $suffix == mpkg ]] ; then
 		! [[ $isx_fp ]] && isx_fp="-"
 		isx_sha=$(echo "$isxsha_raw" | grep "^SHA1 Fingerprint=" | awk -F= '{print $2}' | sed 's/://g')
 		! [[ $isx_sha ]] && isx_sha="-"
-		[[ $(echo "$isx_subject" | grep "OU=") ]] && isx_id=$(echo "$isx_subject" | awk -F"OU=" '{print substr($0, index($0,$2))}' | awk -F, '{print $1}')
+		if echo "$isx_subject" | grep -q "OU=" ; then
+			isx_id=$(echo "$isx_subject" | awk -F"OU=" '{print substr($0, index($0,$2))}' | awk -F, '{print $1}')
+		fi
 		! [[ $isx_id ]] && isx_id="-"
 		infofilepath="$target_subdir/$filename-$posixdate-info.txt"
 		echo -e "Leaf: ./$isx_leaf\nCommon name: $isx_auth\nTeam ID: $isx_id\nSHA-2 256 fingerprint: $isx_fp\nSHA-1 fingerprint: $isx_sha\nSKID: $isx_skid\nAKID: $isx_akid" \
@@ -106,16 +108,16 @@ if [[ $suffix == pkg ]] || [[ $suffix == mpkg ]] ; then
 	fi
 else
 	workdir=$(pwd)
-	cd "$target_subdir"
+	cd "$target_subdir" || { echo "Error: cd" ; continue ; }
 	csx_all=$(codesign -dvvvv --extract-certificates \
 		--requirements "$filename-$posixdate-requirements.txt" \
 		--entitlements "$filename-$posixdate-entitlements.xml" \
 		"$filepath" 2>&1)
 	if ! [[ -f codesign0 ]] ; then
-		cd "$workdir"
-		if [[ $(echo "$csx_all" | grep "^Signature=adhoc") ]] ; then
+		cd "$workdir" || { echo "Error: cd" ; continue ; }
+		if echo "$csx_all" | grep -q "^Signature=adhoc" ; then
 			echo "Error: ad-hoc signature!"
-		elif [[ $(echo "$csx_all" | grep "^Authority=(unavailable)") ]] ; then
+		elif echo "$csx_all" | grep -q "^Authority=(unavailable)" ; then
 			sver=$(spctl -a -vvvv -t install "$filepath" 2>&1 | grep "$filename: " | awk -F": " '{print substr($0, index($0,$2))}')
 			! [[ $sver ]] && sver="-"
 			echo "Error: authority unavailable! ($sver)"
@@ -127,7 +129,7 @@ else
 		csx_leaf="$filename-$posixdate-leaf.der"
 		mv codesign0 "$csx_leaf" 2>/dev/null
 		rm -f codesign* 2>/dev/null
-		cd "$workdir"
+		cd "$workdir" || { echo "Error: cd" ; continue ; }
 		csx_auth=$(echo "$csx_all" | grep "^Authority=" | head -n 1 | awk -F= '{print $2}' | sed 's/[][]//g')
 		csx_raw=$(openssl x509 -in "$target_subdir/$csx_leaf" -inform DER -noout -text -fingerprint -sha256 2>/dev/null)
 		csxsha_raw=$(openssl x509 -in "$target_subdir/$csx_leaf" -inform DER -noout -text -fingerprint -sha1 2>/dev/null)
